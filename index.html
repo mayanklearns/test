@@ -104,16 +104,13 @@
       });
 
       async function getDeviceCode() {
-        const response = await fetch(`${GITHUB_BASE_URL}/login/device/code`, {
+        const response = await fetch('/device-code', {
           method: "POST",
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-            'Accept': 'application/json'
-          },
-          body: new URLSearchParams({
+          headers: standardHeaders(),
+          body: JSON.stringify({
             client_id: GITHUB_CLIENT_ID,
-            scope: GITHUB_APP_SCOPES
-          })
+            scope: GITHUB_APP_SCOPES,
+          }),
         });
 
         if (!response.ok) throw new Error(`Failed to get device code: HTTP ${response.status}`);
@@ -129,13 +126,10 @@
         const sleepDuration = (deviceCode.interval + 1) * 1000;
 
         while (true) {
-          const response = await fetch(`${GITHUB_BASE_URL}/login/oauth/access_token`, {
+          const response = await fetch('/access-token', {
             method: "POST",
-            headers: {
-              'Content-Type': 'application/x-www-form-urlencoded',
-              'Accept': 'application/json'
-            },
-            body: new URLSearchParams({
+            headers: standardHeaders(),
+            body: JSON.stringify({
               client_id: GITHUB_CLIENT_ID,
               device_code: deviceCode.device_code,
               grant_type: "urn:ietf:params:oauth:grant-type:device_code",
