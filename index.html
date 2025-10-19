@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GitHub Token Generator</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 600px;
+        margin: 50px auto;
+        padding: 20px;
+        background-color: #f4f4f4;
+        color: #333;
+      }
+      .container {
+        background: white;
+        padding: 30px;
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      }
+      h1 {
+        text-align: center;
+        color: #24292e;
+      }
+      button {
+        display: block;
+        width: 100%;
+        padding: 12px;
+        background-color: #28a745;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        font-size: 16px;
+        cursor: pointer;
+        margin: 20px 0;
+      }
+      button:hover {
+        background-color: #218838;
+      }
+      button:disabled {
+        background-color: #6c757d;
+        cursor: not-allowed;
+      }
+      .status {
+        text-align: center;
+        margin: 20px 0;
+        font-weight: bold;
+      }
+      .token {
+        background: #f8f9fa;
+        padding: 15px;
+        border-radius: 4px;
+        word-break: break-all;
+        font-family: monospace;
+        margin: 20px 0;
+      }
+      .error {
+        color: #dc3545;
+      }
+      .success {
+        color: #28a745;
+      }
+      .hidden {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>GitHub Token Generator</h1>
+      <p>This tool generates a GitHub access token using OAuth device flow.</p>
+
+      <button id="generateBtn">Generate Token</button>
+
+      <div id="status" class="status hidden"></div>
+
+      <div id="codeSection" class="hidden">
+        <p>
+          Go to
+          <a id="verificationLink" href="#" target="_blank"
+            >GitHub Device Activation</a
+          >
+          and enter this code:
+        </p>
+        <div id="userCode" class="token"></div>
+        <p>Waiting for authorization...</p>
+      </div>
+
+      <div id="tokenSection" class="hidden">
+        <p class="success">Token generated successfully!</p>
+        <div id="token" class="token"></div>
+      </div>
+    </div>
+
+    <script>
+      const GITHUB_BASE_URL = "https://github.com";
+      const GITHUB_CLIENT_ID = "Iv1.b507a08c87ecfe98";
+      const GITHUB_APP_SCOPES = ["read:user"].join(" ");
+
+      const standardHeaders = () => ({
+        "content-type": "application/json",
+        accept: "application/json",
+      });
+
+      async function getDeviceCode() {
+        const response = await fetch(`${GITHUB_BASE_URL}/login/device/code`, {
+          method: "POST",
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Accept': 'application/json'
+          },
+          body: new URLSearchParams({
+            client_id: GITHUB_CLIENT_ID,
+            scope: GITHUB_APP_SCOPES
+          })
+        });
+
+        if (!response.ok) throw new Error(`Failed to get device code: HTTP ${response.status}`);
+
+        return await response.json();
+      }
+
+      function sleep(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+      }
+
+      async function pollAccessToken(deviceCode) {
+        const sleepDuration = (deviceCode.interval + 1) * 1000;
+
+        while (true) {
+          const response = await fetch(`${GITHUB_BASE_URL}/login/oauth/access_token`, {
+            method: "POST",
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded',
+              'Accept': 'application/json'
+            },
+            body: new URLSearchParams({
+              client_id: GITHUB_CLIENT_ID,
+              device_code: deviceCode.device_code,
+              grant_type: "urn:ietf:params:oauth:grant-type:device_code",
+            }),
+          });
+
+          if (!response.ok) {
+            await sleep(sleepDuration);
+            continue;
+          }
+
+          const json = await response.json();
+          const { access_token } = json;
+
+          if (access_token) {
+            return access_token;
+          } else {
+            await sleep(sleepDuration);
+          }
+        }
+      }
+
+      const generateBtn = document.getElementById("generateBtn");
+      const status = document.getElementById("status");
+      const codeSection = document.getElementById("codeSection");
+      const tokenSection = document.getElementById("tokenSection");
+      const userCode = document.getElementById("userCode");
+      const verificationLink = document.getElementById("verificationLink");
+      const tokenDiv = document.getElementById("token");
+      let pollingInterval;
+
+      generateBtn.addEventListener("click", startTokenGeneration);
+
+      async function startTokenGeneration() {
+        generateBtn.disabled = true;
+        status.textContent = "Requesting device code...";
+        status.className = "status";
+        status.classList.remove("hidden");
+
+        try {
+          const data = await getDeviceCode();
+
+          if (data.error) {
+            throw new Error(data.error_description || data.error);
+          }
+
+          userCode.textContent = data.user_code;
+          verificationLink.href = data.verification_uri;
+          verificationLink.textContent = data.verification_uri;
+
+          status.classList.add("hidden");
+          codeSection.classList.remove("hidden");
+
+          pollAccessToken(data).then(token => {
+            codeSection.classList.add("hidden");
+            tokenSection.classList.remove("hidden");
+            tokenDiv.textContent = `ghu_${token}`;
+            generateBtn.disabled = false;
+          }).catch(error => {
+            status.textContent = `Error: ${error.message}`;
+            status.className = "status error";
+            status.classList.remove("hidden");
+            codeSection.classList.add("hidden");
+            generateBtn.disabled = false;
+          });
+        } catch (error) {
+          status.textContent = `Error: ${error.message}`;
+          status.className = "status error";
+          generateBtn.disabled = false;
+        }
+      }
+    </script>
+  </body>
+</html>
